@@ -1,4 +1,4 @@
-prefix              = "am" # Prefix for the resources -- max two letters
+prefix              = "al" # Prefix for the resources -- max two letters
 project             = "curamet-onboarding"
 project_number      = "696820564091"
 region              = "europe-west1"

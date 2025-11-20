@@ -1,0 +1,86 @@
+name: Deploy to Production (Main)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'terraform/**'
+      - 'package.json'
+      - 'Dockerfile'
+      - '.github/workflows/deploy-main.yml'
+
+env:
+  PROJECT_ID: curamet-onboarding
+  REGION: europe-west1
+  ENVIRONMENT: dev
+  TF_VERSION: 1.9.8
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker europe-docker.pkg.dev
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: |
+          terraform init --backend-config="environments/${{ env.ENVIRONMENT }}/backend.conf"
+
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: |
+          terraform plan -var-file="environments/${{ env.ENVIRONMENT }}/terraform.tfvars" -no-color
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: |
+          terraform apply -var-file="environments/${{ env.ENVIRONMENT }}/terraform.tfvars" -auto-approve -no-color
+
+      - name: Get Cloud Run URL
+        id: get-url
+        working-directory: ./terraform
+        run: |
+          SERVICE_URL=$(terraform output -raw run_service_url 2>/dev/null || echo "Not available")
+          echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
+
+      - name: Deployment Summary
+        run: |
+          echo "### 🚀 Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** Production (main)" >> $GITHUB_STEP_SUMMARY
+          echo "**Project:** ${{ env.PROJECT_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ env.REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Service URL:** ${{ steps.get-url.outputs.service_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Author:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
