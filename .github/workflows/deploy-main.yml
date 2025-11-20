@@ -70,8 +70,13 @@ jobs:
         id: get-url
         working-directory: ./terraform
         run: |
-          SERVICE_URL=$(terraform output -raw run_service_url 2>/dev/null || echo "Not available")
-          echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
+          SERVICE_URL=$(terraform output -raw run_service_url 2>/dev/null || true)
+          # Only set the output if SERVICE_URL is not empty and not "Not available"
+          if [ -n "$SERVICE_URL" ] && [ "$SERVICE_URL" != "Not available" ]; then
+            echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
+          else
+            echo "service_url=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Deployment Summary
         run: |
